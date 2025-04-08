@@ -1,4 +1,4 @@
-use crate::{collection, alloc, err};
+use crate::{http, collection, alloc, err};
 
 #[derive(Debug)]
 pub enum HttpStatus {
@@ -6,21 +6,19 @@ pub enum HttpStatus {
     Error,
 }
 
-pub struct HttpProtocolVersion(u32);
-
 pub struct HttpResponse {
     status: HttpStatus,
-    version: HttpProtocolVersion,
+    version: http::Version,
     body: collection::Array<u8>,
 }
 
 impl HttpResponse {
-    pub fn new(version: u32, status: HttpStatus, content: &[u8], allocator: &mut alloc::Allocator) -> Result<HttpResponse, err::Error> {
+    pub fn new(version: http::Version, status: HttpStatus, content: http::Content, allocator: &mut alloc::Allocator) -> Result<HttpResponse, err::Error> {
         let mut body: collection::Array<u8> = collection::Array::new(1024, allocator)?;
         body.append_slice(b"HTTP/")?;
 
         match version {
-            1 => body.append_slice(b"1.1 ")?,
+            http::Version::OneOne => body.append_slice(b"1.1 ")?,
             _ => return Err(err::Error::HttpVersion),
         }
 
@@ -29,15 +27,24 @@ impl HttpResponse {
             HttpStatus::Error => body.append_slice(b"404 ERROR")?,
         }
 
-        if content.len() > 0 {
+        if let Some(b) = content.bytes() {
             body.append_slice(b"\r\n")?;
+
+            match content {
+                http::Content::Html(_) => {
+                    body.append_slice(b"Content-Type: text/html\r\n")?;
+                }
+                _ => return Err(err::Error::Parsing),
+            }
+
             body.append_slice(b"Content-Length: ")?;
-            body.parse(content.len())?;
+            body.parse(b.len())?;
             body.append_slice(b"\r\n\r\n")?;
-            body.append_slice(content)?;
+            body.append_slice(b)?;
+
+            println!("body: {}", std::str::from_utf8(body.slice()).unwrap());
         }
 
-        let version = HttpProtocolVersion(version);
 
         Ok(HttpResponse {
             status,
@@ -53,6 +60,6 @@ impl HttpResponse {
 
 impl std::fmt::Display for HttpResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Status: {:?}, ProtocolVersion: {}, {}", self.status, self.version.0, std::str::from_utf8(self.body.slice()).unwrap())
+        write!(f, "Status: {:?}, ProtocolVersion: {:?}, {}", self.status, self.version, std::str::from_utf8(self.body.slice()).unwrap())
     }
 }

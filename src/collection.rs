@@ -117,20 +117,25 @@ impl<T> Array<T> {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 
-    pub fn is_null(&self) -> bool {
-        self.ptr.is_null()
+    pub fn slice_mut(&mut self) -> &mut [T] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
-
 }
 
 impl Array<u8> {
     pub fn parse(&mut self, value: usize) -> Result<(), err::Error> {
+        let l = self.len();
         let mut n = value;
 
         while n > 0 {
             let rest = n % 10;
             n /= 10;
-            self.push(rest as u8)?;
+            self.push(rest as u8 + b'0')?;
+        }
+
+        for i in l..self.len {
+            let last = self.len - (i - l) - 1;
+            unsafe { std::mem::swap(&mut *self.ptr.add(i), &mut *self.ptr.add(last)) };
         }
 
         Ok(())

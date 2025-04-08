@@ -2,6 +2,7 @@
 pub enum Error {
     Allocation,
     OutOfBounds,
+    FileNotFound,
     Connect,
     Parsing,
     HttpMethod,

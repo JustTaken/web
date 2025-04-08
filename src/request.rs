@@ -1,36 +1,29 @@
-use crate::{alloc, collection, err::Error};
+use crate::{http, alloc, collection, err};
 
 pub struct RequestHeader {
-    method: HttpMethod,
+    method: http::Method,
     end_point: EndPoint,
-    version: HttpProtocolVersion,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum HttpMethod {
-    Get,
-    Post,
+    version: http::Version,
 }
 
 pub struct EndPoint(collection::Array<u8>);
-pub struct HttpProtocolVersion(u32);
 
 impl RequestHeader {
-    pub fn new(method: HttpMethod, end: &[u8], version: u32, allocator: &mut alloc::Allocator) -> RequestHeader {
+    pub fn new(method: http::Method, end: &[u8], protocol: http::Version, allocator: &mut alloc::Allocator) -> RequestHeader {
         let end_point = EndPoint::from_bytes(Some(end), allocator).unwrap();
-        let protocol = HttpProtocolVersion(version);
 
         RequestHeader {
             method, end_point, version: protocol,
         }
     }
-    pub fn from_bytes(bytes: &[u8], allocator: &mut alloc::Allocator) -> Result<RequestHeader, Error> {
+
+    pub fn from_bytes(bytes: &[u8], allocator: &mut alloc::Allocator) -> Result<RequestHeader, err::Error> {
         let mut iter = bytes.split(|&b| b == b' ' || b == b'\r');
 
         Ok(RequestHeader {
-            method: HttpMethod::from_bytes(iter.next())?,
+            method: http::Method::from_bytes(iter.next())?,
             end_point: EndPoint::from_bytes(iter.next(), allocator)?,
-            version: HttpProtocolVersion::from_bytes(iter.next())?,
+            version: http::Version::from_bytes(iter.next())?,
         })
     }
 }
@@ -48,8 +41,9 @@ impl collection::Hash for RequestHeader {
             count += *s as usize;
         }
 
-        let version = self.version.0 << 30;
-        count |= version as usize;
+        let v = self.version as usize;
+        let version: usize = v << 30;
+        count |= version;
 
         count
     }
@@ -59,28 +53,10 @@ impl collection::Hash for RequestHeader {
     }
 }
 
-impl HttpMethod {
-    fn from_bytes(opt: Option<&[u8]>) -> Result<HttpMethod, Error> {
-        let Some(bytes) = opt else {
-            return Err(Error::Parsing);
-        };
-
-        match bytes {
-            b"GET" => Ok(HttpMethod::Get),
-            b"POST" => Ok(HttpMethod::Post),
-            _ => Err(Error::HttpMethod),
-        }
-    }
-
-    fn eq(&self, other: &HttpMethod) -> bool {
-        *self as u32 == *other as u32
-    }
-}
-
 impl EndPoint {
-    fn from_bytes(opt: Option<&[u8]>, allocator: &mut alloc::Allocator) -> Result<EndPoint, Error> {
+    fn from_bytes(opt: Option<&[u8]>, allocator: &mut alloc::Allocator) -> Result<EndPoint, err::Error> {
         let Some(bytes) = opt else {
-            return Err(Error::Parsing);
+            return Err(err::Error::Parsing);
         };
 
         let mut string = collection::Array::new(bytes.len(), allocator)?;
@@ -91,36 +67,8 @@ impl EndPoint {
     }
 }
 
-impl HttpProtocolVersion {
-    fn from_bytes(opt: Option<&[u8]>) -> Result<HttpProtocolVersion, Error> {
-        let Some(bytes) = opt else {
-            return Err(Error::Parsing);
-        };
-
-        let mut iter = bytes.split(|&b| b == b'/');
-
-        let Some(http_string) = iter.next() else {
-            return Err(Error::Parsing);
-        };
-
-        let Some(version) = iter.next() else {
-            return Err(Error::Parsing);
-        };
-
-        if http_string != b"HTTP" {
-            return Err(Error::Protocol);
-        }
-
-        match version {
-            b"1.1" => Ok(HttpProtocolVersion(1)),
-            b"1.0" => Ok(HttpProtocolVersion(1)),
-            _ => Err(Error::HttpVersion),
-        }
-    }
-}
-
 impl std::fmt::Display for RequestHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Method: {:?}, ProtocolVersion: {}, EndPoint: {}", self.method, self.version.0, std::str::from_utf8(self.end_point.0.slice()).unwrap())
+        write!(f, "Method: {:?}, ProtocolVersion: {:?}, EndPoint: {}", self.method, self.version, std::str::from_utf8(self.end_point.0.slice()).unwrap())
     }
 }

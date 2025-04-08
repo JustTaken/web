@@ -5,6 +5,7 @@
   in {
     devShells.${system}.default = pkgs.mkShell {
       packages = with pkgs; [
+        rust-analyzer
         helix
         rustup
       ];

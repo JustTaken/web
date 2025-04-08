@@ -1,4 +1,4 @@
-use crate::err::Error;
+use crate::err;
 
 pub struct Allocator {
     bytes: *mut u8,
@@ -17,7 +17,7 @@ impl Allocator {
         }
     }
 
-    pub fn child(&mut self, capacity: usize) -> Result<Allocator, Error> {
+    pub fn child(&mut self, capacity: usize) -> Result<Allocator, err::Error> {
         Ok(Allocator {
             bytes: self.alloc(capacity)?,
             capacity,
@@ -25,13 +25,13 @@ impl Allocator {
         })
     }
 
-    pub fn alloc<T>(&mut self, count: usize) -> Result<*mut T, Error> {
-        let layout = std::alloc::Layout::from_size_align(count * std::mem::size_of::<T>(), std::mem::align_of::<T>()).map_err(|_| Error::Allocation)?;
+    pub fn alloc<T>(&mut self, count: usize) -> Result<*mut T, err::Error> {
+        let layout = std::alloc::Layout::from_size_align(count * std::mem::size_of::<T>(), std::mem::align_of::<T>()).map_err(|_| err::Error::Allocation)?;
         let size = layout.size();
         let align = layout.align();
 
         if self.end + size > self.capacity {
-            return Err(Error::Allocation);
+            return Err(err::Error::Allocation);
         }
 
         let ptr = unsafe { self.bytes.add(self.end) };
